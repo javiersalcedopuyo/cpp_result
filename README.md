@@ -1,5 +1,5 @@
 # cpp_result
-A Simple Result Type For C++
+## A Simple Result Type For C++
 
 Inspired by the exception-less way to manage errors in languages like *Rust*, *Swift* or *Zig*.
 
