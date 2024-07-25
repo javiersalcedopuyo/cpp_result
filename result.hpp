@@ -1,49 +1,79 @@
-#include <variant>
-#include <type_traits>
+#if __cplusplus < 201402L
+#error Minimum supported version is C++ 14.
+#else // C++ 14 or newer
 
-template<typename Value, typename Error>
-class [[nodiscard]] Result
+#if !defined(JSP_RESULT_HPP)
+#define JSP_RESULT_HPP
+
+#if defined(NDEBUG)
+    #include <stdlib.h>
+    #if !defined(JSP_REQUIRE)
+        #define JSP_REQUIRE(condition) if (!condition) { abort(); }
+    #endif // JSP_REQUIRE
+#else // NDEBUG
+    #include<assert.h>
+    #if !defined(JSP_REQUIRE)
+        #define JSP_REQUIRE(condition) assert(condition);
+    #endif // JSP_REQUIRE
+#endif // NDEBUG
+
+#if !defined(JSP_NO_STL)
+    #include <type_traits>
+#endif // !JSP_NO_STL
+
+namespace jsp
 {
-    static_assert(std::is_enum<Error>() || std::is_integral<Error>(),
-                  "The error type must be an enum (recommended) or an integer (legacy).");
-
-public:
-    Result() = delete;
-    Result(Value&& val) noexcept : v(std::move(val))    {}
-    Result(Error error) noexcept : v(error) {}
-
-    // True if it holds a Value, false if it holds an Error
-    constexpr explicit operator bool() const noexcept
+    template<typename Value, typename Error>
+    class
+#if __cplusplus >= 201703L
+    [[nodiscard]]
+#endif // C++ 17 or newer
+    Result
     {
-        return std::holds_alternative<Value>(v);
-    }
-    constexpr auto has_value() const noexcept -> bool { return bool(*this); }
+    #if !defined(JSP_NO_STL)
+        static_assert(
+            std::is_enum<Error>() || std::is_integral<Error>(),
+            "The error type must be an enum (recommended) or an integer (legacy).");
+    #endif // !JSP_NO_STL
 
-    // Unwraps the contained Value. If instead it contains an Error, throws an exception
-    constexpr auto value() const noexcept(false) -> const Value&&
-    {
-        return std::move( std::get<Value>(v) );
-    }
+    public:
+        Result() = delete;
+        Result(Value v) noexcept : val(v), flag(true)  {}
+        Result(Error e) noexcept : err(e), flag(false) {}
 
-    // Returns the contained Value, or the provided alternative if it holds an Error
-    constexpr auto value_or(Value&& other) const noexcept -> const Value&&
-    {
-        return has_value()  ? value()
-                            : std::forward<Value>(other);
-    }
+        constexpr explicit operator bool() const noexcept { return flag; }
 
-    // Returns the contained Value, or the provided alternative if it holds an Error
-    constexpr auto value_or(Value& other) const noexcept -> const Value&&
-    {
-        return value_or( std::forward<Value>(other) );
-    }
+        // True if it holds a Value, false if it holds an Error
+        constexpr auto has_value() const noexcept -> bool { return flag; }
 
-    // Unwraps the contained Error. If instead it contains an Value, throws an exception
-    constexpr auto error() const noexcept(false) -> Error
-    {
-        return std::get<Error>(v);
-    }
+        // Unwraps the held value, or returns the provided alternative if it holds an Error
+        constexpr auto value_or(Value alternative) const noexcept -> Value
+        {
+            return has_value() ? val : alternative;
+        }
 
-private:
-    std::variant<Value, Error> v;
-};
+        // Unwraps the held Value. If instead it holds an Error, it aborts the program
+        constexpr auto value() const noexcept -> Value
+        {
+            JSP_REQUIRE( has_value() );
+            return val;
+        }
+
+        // Unwraps the held Error. If instead it holds a Value, it aborts the program
+        constexpr auto error() const noexcept(false) -> Error
+        {
+            JSP_REQUIRE( !has_value() );
+            return err;
+        }
+
+    private:
+        const union
+        {
+            Value val;
+            Error err;
+        };
+        const bool flag;
+    };
+}
+#endif // !JSP_RESULT_HPP
+#endif // C++ version
